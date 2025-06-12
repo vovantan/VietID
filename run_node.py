@@ -207,8 +207,7 @@ async def main():
 
     tasks = [
         asyncio.create_task(node.run_server()),
-        asyncio.create_task(consensus.run_consensus_loop()),
-        asyncio.create_task(connect_after_delay("127.0.0.1", 8765, 3, node_id, node)),
+        asyncio.create_task(consensus.run_consensus_loop())
     ]
     threading.Thread(target=run_api, args=(blockchain, node, sender_wallet)).start()
     try:
