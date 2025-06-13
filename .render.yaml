@@ -19,9 +19,9 @@ services:
       - key: ALL_VALIDATOR_IDS
         value: node_1,node_2,node_3
       - key: PEER_NODES
-        value: node_2:vietid-2.onrender.com:6001,node_3:vietid-3.onrender.com:6002
+        value: node_2:vietid-1.onrender.com:6001,node_3:vietid-2.onrender.com:6002
       - key: PEER_CERT_URLS
-        value: https://vietid-2.onrender.com/cert/node_2,https://vietid-3.onrender.com/cert/node_3
+        value: https://vietid-1.onrender.com/cert/node_2,https://vietid-2.onrender.com/cert/node_3
 
   - type: web
     name: vietid-1
@@ -43,9 +43,9 @@ services:
       - key: ALL_VALIDATOR_IDS
         value: node_1,node_2,node_3
       - key: PEER_NODES
-        value: node_1:vietid.onrender.com:6000,node_3:vietid-3.onrender.com:6002
+        value: node_1:vietid.onrender.com:6000,node_3:vietid-2.onrender.com:6002
       - key: PEER_CERT_URLS
-        value: https://vietid.onrender.com/cert/node_1,https://vietid-3.onrender.com/cert/node_3
+        value: https://vietid.onrender.com/cert/node_1,https://vietid-2.onrender.com/cert/node_3
 
   - type: web
     name: vietid-2
@@ -67,6 +67,6 @@ services:
       - key: ALL_VALIDATOR_IDS
         value: node_1,node_2,node_3
       - key: PEER_NODES
-        value: node_1:vietid.onrender.com:6000,node_2:vietid-2.onrender.com:6001
+        value: node_1:vietid.onrender.com:6000,node_2:vietid-1.onrender.com:6001
       - key: PEER_CERT_URLS
-        value: https://vietid.onrender.com/cert/node_1,https://vietid-2.onrender.com/cert/node_2
+        value: https://vietid.onrender.com/cert/node_1,https://vietid-1.onrender.com/cert/node_2
