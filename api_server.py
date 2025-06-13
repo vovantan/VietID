@@ -295,6 +295,13 @@ def index():
         "shard_id": blockchain.shard_id,
         "address": wallet.address
     }
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok"}), 200
+
+@app.route("/chain", methods=["GET"])
+def get_chain():
+    return jsonify([block.to_dict() for block in blockchain.chain])
 
 
 def run_api(node_instance, p2p_instance, wallet_instance, port):
