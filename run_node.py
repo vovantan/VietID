@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives import serialization, hashes
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.backends import default_backend
-from api_server import run_api_1
+from api_server import run_api
 import threading
 
 
@@ -475,7 +475,7 @@ async def main():
 
     await tokenomics_governance(blockchain, sender_wallet)
     '''
-    threading.Thread(target=run_api_1, args=(blockchain, node, sender_wallet)).start()
+    threading.Thread(target=run_api, args=(blockchain, node, sender_wallet)).start()
 
     try:
         await asyncio.gather(*tasks)
