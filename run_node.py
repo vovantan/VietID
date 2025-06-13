@@ -191,6 +191,8 @@ async def listen_for_nodes(current_node_id, node: P2PNode):
 
 
 async def main():
+    api_port = int(os.environ.get("PORT", "5000"))
+
     # REMOVED: import argparse and argument parsing logic.
     # Configuration will now be read from environment variables.
 
