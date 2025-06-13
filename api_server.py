@@ -304,16 +304,24 @@ def get_chain():
     return jsonify([block.to_dict() for block in blockchain.chain])
 
 
-def run_api(node_instance, p2p_instance, wallet_instance, port):
-    global blockchain, p2p_node, wallet, main_async_loop
+def run_api(node_instance, p2p_instance, wallet_instance):
+    global blockchain, p2p_node, wallet
     blockchain = node_instance
     p2p_node = p2p_instance
     wallet = wallet_instance
+
+    # Giảm log chi tiết của Flask
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)
-    port = int(os.environ.get("PORT", 5000)) # Lấy cổng từ biến môi trường
-    print(f"Flask API server starting on 0.0.0.0:{port}")
-    app.run(host='0.0.0.0', port=port, debug=False)
+
+    os.environ['FLASK_ENV'] = 'production'
+
+    # 👇 Lấy PORT từ biến môi trường (do Render chỉ định)
+    port = int(os.environ.get("PORT", 5000))
+
+    print(f"[API] 🚀 Flask server starting at 0.0.0.0:{port}")
+    app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
