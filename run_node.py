@@ -198,7 +198,7 @@ async def main():
     node_id = os.environ.get("NODE_ID", "default_node_id_0")
     shard_id = int(os.environ.get("SHARD_ID", 0))
     # Render.com provides the PORT environment variable for web services.
-    node_port = int(os.environ.get("PORT", 8000)) # Default to 8000 if PORT env var is not set (e.g., local run)
+    node_port = int(os.environ.get("PORT", 5000)) # Default to 8000 if PORT env var is not set (e.g., local run)
     node_host = os.environ.get("HOST", "0.0.0.0") # Listen on all network interfaces
 
     is_validator = os.environ.get("IS_VALIDATOR", "True").lower() == "true"
