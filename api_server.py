@@ -296,5 +296,12 @@ def run_api(node_instance, p2p_instance, wallet_instance):
     wallet = wallet_instance
     log = logging.getLogger('werkzeug')
     log.setLevel(logging.ERROR)
-    os.environ['FLASK_ENV'] = 'production'
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000)) # Lấy cổng từ biến môi trường
+    print(f"Flask API server starting on 0.0.0.0:{port}")
+    app.run(host='0.0.0.0', port=port, debug=False)
+
+
+
+
+    
+    
