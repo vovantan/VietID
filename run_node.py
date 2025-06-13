@@ -285,7 +285,7 @@ async def main():
         validator_public_key_ecc=sender_wallet.public_key_ecc,
         validators=validators, # Validators list for this specific shard
         view_timeout=10, # Can be moved to environment variable
-        tx_batch_size=3 # Can be moved to environment variable
+        tx_batch_size=1 # Can be moved to environment variable
     )
     blockchain.dbft_consensus = consensus
     node.consensus = consensus
