@@ -191,7 +191,9 @@ async def listen_for_nodes(current_node_id, node: P2PNode):
 
 
 async def main():
-    api_port = int(os.environ.get("PORT", "5000"))
+    api_port = int(os.environ.get("PORT", 5000))          # Flask
+    p2p_port = int(os.environ.get("P2P_PORT", 6000))      # WebSocket P2P
+
 
     # REMOVED: import argparse and argument parsing logic.
     # Configuration will now be read from environment variables.
