@@ -287,6 +287,14 @@ def send_cross_transfer():
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route("/", methods=["GET"])
+def index():
+    return {
+        "message": "✅ VietID node is running!",
+        "node_id": blockchain.node_id,
+        "shard_id": blockchain.shard_id,
+        "address": wallet.address
+    }
 
 
 def run_api(node_instance, p2p_instance, wallet_instance, port):
