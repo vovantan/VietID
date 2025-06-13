@@ -290,7 +290,7 @@ async def main():
 
     # Start Flask API server in a separate thread.
     # Ensure run_api in api_server.py is updated to use os.environ.get("PORT").
-    threading.Thread(target=run_api, args=(blockchain, node, sender_wallet), daemon=True).start()
+    threading.Thread(target=run_api, args=(blockchain, node, sender_wallet, api_port), daemon=True).start()
     logging.info("Flask API server đã được khởi động trong một luồng riêng.")
 
     # Call broadcast_node_info once for logging purposes (original loop removed)
