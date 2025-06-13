@@ -270,7 +270,8 @@ async def main():
         port=node_port, # Use the port assigned by Render.com
         blockchain=blockchain,
         ssl_context_server=ssl_server_ctx,
-        ssl_context_client=ssl_client_ctx
+        ssl_context_client=ssl_client_ctx,
+        p2p_port = p2p_port
     )
     blockchain.p2p_node = node
     node.message_processor_task = asyncio.create_task(node._process_message_queue())
