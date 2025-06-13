@@ -289,7 +289,7 @@ def send_cross_transfer():
 
 
 
-def run_api(node_instance, p2p_instance, wallet_instance):
+def run_api(node_instance, p2p_instance, wallet_instance, port):
     global blockchain, p2p_node, wallet, main_async_loop
     blockchain = node_instance
     p2p_node = p2p_instance
