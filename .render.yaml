@@ -1,0 +1,72 @@
+services:
+  - type: web
+    name: vietid
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run_node.py
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: P2P_PORT
+        value: 6000
+      - key: NODE_ID
+        value: node_1
+      - key: SHARD_ID
+        value: 0
+      - key: IS_VALIDATOR
+        value: "true"
+      - key: ALL_VALIDATOR_IDS
+        value: node_1,node_2,node_3
+      - key: PEER_NODES
+        value: node_2:vietid-2.onrender.com:6001,node_3:vietid-3.onrender.com:6002
+      - key: PEER_CERT_URLS
+        value: https://vietid-2.onrender.com/cert/node_2,https://vietid-3.onrender.com/cert/node_3
+
+  - type: web
+    name: vietid-1
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run_node.py
+    envVars:
+      - key: PORT
+        value: 5001
+      - key: P2P_PORT
+        value: 6001
+      - key: NODE_ID
+        value: node_2
+      - key: SHARD_ID
+        value: 1
+      - key: IS_VALIDATOR
+        value: "true"
+      - key: ALL_VALIDATOR_IDS
+        value: node_1,node_2,node_3
+      - key: PEER_NODES
+        value: node_1:vietid.onrender.com:6000,node_3:vietid-3.onrender.com:6002
+      - key: PEER_CERT_URLS
+        value: https://vietid.onrender.com/cert/node_1,https://vietid-3.onrender.com/cert/node_3
+
+  - type: web
+    name: vietid-3
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run_node.py
+    envVars:
+      - key: PORT
+        value: 5002
+      - key: P2P_PORT
+        value: 6002
+      - key: NODE_ID
+        value: node_3
+      - key: SHARD_ID
+        value: 2
+      - key: IS_VALIDATOR
+        value: "true"
+      - key: ALL_VALIDATOR_IDS
+        value: node_1,node_2,node_3
+      - key: PEER_NODES
+        value: node_1:vietid.onrender.com:6000,node_2:vietid-2.onrender.com:6001
+      - key: PEER_CERT_URLS
+        value: https://vietid.onrender.com/cert/node_1,https://vietid-2.onrender.com/cert/node_2
