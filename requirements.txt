@@ -2,3 +2,4 @@ Flask==2.3.2  # Or your preferred version
 websockets==11.0.3 # Or your preferred version
 ecdsa==0.18.0 # Or your preferred version
 cryptography==41.0.3 # Or your preferred version
+requests==2.32.4
