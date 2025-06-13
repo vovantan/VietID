@@ -45,8 +45,8 @@ def generate_self_signed_cert(private_key, public_key, common_name, host_ip, val
         .issuer_name(issuer)
         .public_key(public_key)
         .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.now(timezone.utc)) # FIX: Replaced utcnow() with now(timezone.utc)
-        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=validity_days)) # FIX: Replaced utcnow() with now(timezone.utc)
+        .not_valid_before(datetime.now(timezone.utc))
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=validity_days))
         .add_extension(
             # Add DNSName for cloud environments where hostnames are common,
             # alongside IPAddress for robustness.
@@ -60,9 +60,6 @@ def generate_self_signed_cert(private_key, public_key, common_name, host_ip, val
     )
     return cert
 
-# REMOVED: NODE_HOST_MAP as it's static and not suitable for dynamic cloud environments like Render.com.
-# Discovery will rely on environment variables (PEER_NODES, PEER_CERT_URLS).
-
 def load_or_generate_tls_certs(current_node_id: str, host_ip: str, all_validator_ids: list):
     """
     Loads or generates TLS certificates for the current node and sets up SSL contexts.
@@ -75,16 +72,11 @@ def load_or_generate_tls_certs(current_node_id: str, host_ip: str, all_validator
     key_path = os.path.join(data_dir, f"{current_node_id}_key.pem")
     cert_path = os.path.join(data_dir, f"{current_node_id}.pem")
 
-    # In Render's ephemeral filesystem, we will always generate new certs on deploy/restart
-    # unless Persistent Disks are explicitly configured and managed.
-    # For this basic setup, we assume certs might not persist, so we always generate.
     logging.warning("Tạo chứng chỉ tự ký mới cho nút (Render có thể reset filesystem).")
     private_key, public_key = generate_rsa_key_pair()
     common_name = f"{current_node_id}.vietid.blockchain" # Use node_id as common name for cert
 
-    # Use 127.0.0.1 for cert's IP SAN as Render manages external IPs dynamically.
-    # The actual network host for P2P will be 0.0.0.0.
-    host_ip_for_cert = ipaddress.IPv4Address("127.0.0.1")
+    host_ip_for_cert = ipaddress.IPv44Address("127.0.0.1")
 
     certificate = generate_self_signed_cert(private_key, public_key, common_name, str(host_ip_for_cert))
     private_key_pem = private_key.private_bytes(
@@ -119,12 +111,9 @@ def load_or_generate_tls_certs(current_node_id: str, host_ip: str, all_validator
         if requests: # Only attempt if 'requests' library is available
             try:
                 logging.info(f"[TLS] 📡 Đang cố gắng tải cert từ URL: {peer_cert_url}")
-                # verify=False is used for self-signed certs in internal networks.
-                # In a production setup with public CAs, this should be True.
                 resp = requests.get(peer_cert_url, verify=False, timeout=5)
                 resp.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
                 
-                # Save to a temporary file and load into SSL contexts
                 temp_peer_cert_file = os.path.join(data_dir, f"temp_peer_{hash(peer_cert_url)}.pem")
                 with open(temp_peer_cert_file, "w") as f:
                     f.write(resp.text)
@@ -152,7 +141,6 @@ def broadcast_node_info(node_id, host, port):
     The original continuous loop for broadcasting is removed.
     """
     logging.info(f"[NODE_INFO] Node {node_id} đang hoạt động tại {host}:{port}")
-    # Original UDP broadcast loop is removed as it's not effective on Render.com.
 
 
 async def listen_for_nodes(current_node_id, node: P2PNode):
@@ -164,17 +152,14 @@ async def listen_for_nodes(current_node_id, node: P2PNode):
     peer_urls_str = os.environ.get("PEER_NODES", "")
     peers_to_connect = [p.strip().split(':', 1) for p in peer_urls_str.split(',') if ':' in p]
 
-    # Attempt to connect to configured peers
     for peer_id, peer_url_with_protocol in peers_to_connect:
         if peer_id == current_node_id:
             continue # Do not connect to self
 
         try:
-            # Ensure the URL has the correct protocol for websockets
             if not peer_url_with_protocol.startswith("wss://"):
                 peer_url_with_protocol = f"wss://{peer_url_with_protocol}"
             
-            # Parse host and port from the URL for P2PNode.connect_to_peer
             from urllib.parse import urlparse
             parsed_url = urlparse(peer_url_with_protocol)
             peer_host = parsed_url.hostname
@@ -185,23 +170,27 @@ async def listen_for_nodes(current_node_id, node: P2PNode):
         except Exception as e:
             logging.error(f"[NODE_DISCOVERY] ❌ Lỗi khi kết nối tới peer {peer_id} ({peer_url_with_protocol}): {e}")
 
-    # Keep the async task alive, potentially for future reconnection logic or other tasks.
     while True:
         await asyncio.sleep(60) # Sleep for 1 minute
 
 
 async def main():
-    # REMOVED: import argparse and argument parsing logic.
-    # Configuration will now be read from environment variables.
-
     # Read configuration from environment variables for Render.com deployment
-    node_id = os.environ.get("NODE_ID", "default_node_id_0")
-    shard_id = int(os.environ.get("SHARD_ID", 0))
-    # Render.com provides the PORT environment variable for web services.
-    node_port = int(os.environ.get("PORT", 8000)) # Default to 8000 if PORT env var is not set (e.g., local run)
-    node_host = os.environ.get("HOST", "0.0.0.0") # Listen on all network interfaces
+    node_id = os.environ.get("NODE_ID", "default_node_id_0").strip()
+    
+    # FIX: Ensure shard_id, node_port are converted safely from string to int
+    shard_id_str = os.environ.get("SHARD_ID", "0").strip()
+    shard_id = int(shard_id_str) if shard_id_str.isdigit() else 0 # Default to 0 if not a digit
 
-    is_validator = os.environ.get("IS_VALIDATOR", "True").lower() == "true"
+    # Render.com provides the PORT environment variable for web services.
+    node_port_str = os.environ.get("PORT", "8000").strip()
+    node_port = int(node_port_str) if node_port_str.isdigit() else 8000 # Default to 8000 if not a digit
+
+    node_host = os.environ.get("HOST", "0.0.0.0").strip()
+
+    is_validator_str = os.environ.get("IS_VALIDATOR", "True").strip().lower()
+    is_validator = is_validator_str == "true"
+
     all_validator_ids_str = os.environ.get("ALL_VALIDATOR_IDS", f"{node_id}").strip()
     all_validator_ids = [v.strip() for v in all_validator_ids_str.split(',') if v.strip()]
     all_validator_ids.sort() # Keep sorted for consistency
@@ -221,24 +210,19 @@ async def main():
     # Initialize the blockchain
     blockchain = VietIDBlockchain(node_id, shard_id)
 
-    # SHARD_VALIDATOR_MAP remains as per original code structure.
-    # In a real-world scenario, this map might also be loaded from configuration
-    # or a decentralized registry.
     SHARD_VALIDATOR_MAP = {
         0: ["node_1_id_example_for_dbft"],
         1: ["node_2_id_example_for_dbft"],
         2: ["node_3_id_example_for_dbft"]
     }
-    # Get validators specifically for this node's shard, based on SHARD_VALIDATOR_MAP
     validators_for_shard = SHARD_VALIDATOR_MAP.get(shard_id, [])
-    # Re-assign 'validators' variable to refer to the shard-specific validators for consensus.
     validators = validators_for_shard
 
     blockchain.validator_shards = SHARD_VALIDATOR_MAP
 
     # Load or generate wallet
     wallet_dir = os.path.join(os.getcwd(), f"node_data_{node_id}")
-    os.makedirs(wallet_dir, exist_ok=True) # Ensure wallet directory exists
+    os.makedirs(wallet_dir, exist_ok=True)
     wallet_file = os.path.join(wallet_dir, f"wallet_{node_id}.json")
 
     if os.path.exists(wallet_file):
@@ -262,8 +246,8 @@ async def main():
     # Initialize P2PNode
     node = P2PNode(
         node_id=node_id,
-        host=node_host, # P2P server will listen on 0.0.0.0
-        port=node_port, # Use the port assigned by Render.com
+        host=node_host,
+        port=node_port,
         blockchain=blockchain,
         ssl_context_server=ssl_server_ctx,
         ssl_context_client=ssl_client_ctx
@@ -279,15 +263,14 @@ async def main():
         is_primary=is_validator,
         validator_private_key_ecc=sender_wallet.private_key_ecc,
         validator_public_key_ecc=sender_wallet.public_key_ecc,
-        validators=validators, # Validators list for this specific shard
-        view_timeout=10, # Can be moved to environment variable
-        tx_batch_size=3 # Can be moved to environment variable
+        validators=validators,
+        view_timeout=10,
+        tx_batch_size=3
     )
     blockchain.dbft_consensus = consensus
     node.consensus = consensus
 
     # Start Flask API server in a separate thread.
-    # Ensure run_api in api_server.py is updated to use os.environ.get("PORT").
     threading.Thread(target=run_api, args=(blockchain, node, sender_wallet), daemon=True).start()
     logging.info("Flask API server đã được khởi động trong một luồng riêng.")
 
@@ -298,18 +281,17 @@ async def main():
     tasks = [
         asyncio.create_task(node.run_server()),
         asyncio.create_task(consensus.run_consensus_loop()),
-        asyncio.create_task(listen_for_nodes(node_id, node)) # Connect to peers based on ENV vars
+        asyncio.create_task(listen_for_nodes(node_id, node))
     ]
 
     try:
         await asyncio.gather(*tasks)
     except Exception as e:
-        logging.error(f"[Main] ❌ Lỗi khi chạy node: {e}", exc_info=True) # Log full traceback
+        logging.error(f"[Main] ❌ Lỗi khi chạy node: {e}", exc_info=True)
     except KeyboardInterrupt:
         logging.info("[Main] ❗ Dừng bởi người dùng.")
     finally:
         logging.info("[Main] 🔻 Dọn dẹp node...")
-        # Clean up tasks and close server connections
         if node.server:
             node.server.close()
             await node.server.wait_closed()
@@ -331,7 +313,8 @@ async def main():
             except Exception as e:
                 logging.error(f"Lỗi khi hủy consensus loop task: {e}")
         logging.info("[Main] ▲ Node đã dừng hoàn toàn.")
-        sys.exit(0) # Ensure a clean exit of the process
+        sys.exit(0)
 
 if __name__ == "__main__":
     asyncio.run(main())
+
