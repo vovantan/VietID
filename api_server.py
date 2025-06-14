@@ -290,7 +290,7 @@ def send_cross_transfer():
 @app.route("/", methods=["GET"])
 def index():
     return {
-        "message": "✅ VietID node is running!",
+        "message": "VietID node is running!",
         "node_id": blockchain.node_id,
         "shard_id": blockchain.shard_id,
         "address": wallet.address
