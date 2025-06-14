@@ -27,7 +27,7 @@ class P2PNode:
             self.handle_peer,
             self.host,
             self.port,
-            ssl=self.ssl_context_server
+            ssl=None#self.ssl_context_server
         )
         print(f"[P2P] Node {self.node_id[:10]}... đang lắng nghe tại wss://{self.host}:{self.port}")
         await self.server.wait_closed()
