@@ -27,13 +27,13 @@ class P2PNode:
             self.handle_peer,
             self.host,
             self.port,
-            ssl=None#self.ssl_context_server
+            ssl=self.ssl_context_server
         )
         print(f"[P2P] Node {self.node_id[:10]}... đang lắng nghe tại wss://{self.host}:{self.port}")
         await self.server.wait_closed()
 
     async def connect_to_peer(self, host, port, current_node_id):
-        uri = f"ws://{host}:{port}"
+        uri = f"wss://{host}:{port}"
         try:
             websocket = await websockets.connect(uri, ssl=self.ssl_context_client)
             await websocket.send(current_node_id)
@@ -94,8 +94,6 @@ class P2PNode:
                 # ❌ Không broadcast CROSS_TRANSFER ra ngoài – chỉ xử lý nội bộ shard
                 my_shard = get_shard_for_node_id(self.node_id)
                 print(f"[P2P][FILTER] ⛔ Giao dịch CROSS_TRANSFER chỉ xử lý trong shard nguồn ({my_shard}), không broadcast.")
-                print(f"[P2P] 🔄 Broadcast {message.get('type')} đến {len(self.peers)} peers")
-
                 return
             
         dead_peers = []
