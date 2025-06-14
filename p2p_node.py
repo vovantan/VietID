@@ -33,7 +33,7 @@ class P2PNode:
         await self.server.wait_closed()
 
     async def connect_to_peer(self, host, port, current_node_id):
-        uri = f"wss://{host}:{port}"
+        uri = f"ws://{host}:{port}"
         try:
             websocket = await websockets.connect(uri, ssl=self.ssl_context_client)
             await websocket.send(current_node_id)
