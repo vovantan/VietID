@@ -4,9 +4,9 @@ from vietid17 import Transaction
 def get_shard_for_node_id(node_id):
         # Mapping giả định
     return {
-        "node_1_id_example_for_dbft": 0,
-        "node_2_id_example_for_dbft": 1,
-        "node_3_id_example_for_dbft": 2,
+        "node1": 0,
+        "node2": 1,
+        "node3": 2,
     }.get(node_id, 0)
 
 class P2PNode:
