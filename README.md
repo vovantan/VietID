@@ -77,7 +77,7 @@ curl http://localhost:5000/balance/<address>
 | POST   | `/tx/send/DID`                        | Gửi giao dịch `DID_REGISTER` |
 | POST   | `/tx/send/VOTE`                       | Gửi giao dịch `VOTE` |
 | POST   | `/tx/send/MINT`                       | Gửi giao dịch `MINT` token |
-| POST   | `/tx/send/CROSS_TRANSFER`             | Gửi giao liên Shard |
+| POST   | `/tx/send/CROSS_TRANSFER`             | Gửi giao dịch liên Shard |
 
 ## 📥 Mẫu gửi giao dịch bằng curl
 
