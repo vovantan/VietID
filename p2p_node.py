@@ -94,6 +94,8 @@ class P2PNode:
                 # ❌ Không broadcast CROSS_TRANSFER ra ngoài – chỉ xử lý nội bộ shard
                 my_shard = get_shard_for_node_id(self.node_id)
                 print(f"[P2P][FILTER] ⛔ Giao dịch CROSS_TRANSFER chỉ xử lý trong shard nguồn ({my_shard}), không broadcast.")
+                print(f"[P2P] 🔄 Broadcast {message.get('type')} đến {len(self.peers)} peers")
+
                 return
             
         dead_peers = []
