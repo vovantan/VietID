@@ -390,6 +390,11 @@ class StateDB:
         self.balance[address] += amount
         print(f"[StateDB] Cập nhật số dư cho {address}: {self.balance[address]}")
 
+    def simulate_transaction(self, tx: Transaction) -> bool:
+        if tx.tx_type == "TRANSFER":
+            return tx.sender_address in self.balance and self.balance[tx.sender_address] >= tx.amount
+        return True
+
     # Đổi tên từ apply_block thành apply_transactions để khớp với VietIDBlockchain.add_block
     def apply_transactions(self, transactions: list) -> bool:
         """Áp dụng một danh sách các giao dịch vào trạng thái hiện tại của StateDB."""
@@ -1038,6 +1043,8 @@ class D_BFT_Consensus:
         self.tx_batch_size = tx_batch_size
 
         self.consensus_loop_task = None
+        self.invalid_tx_warning_printed = False
+        self.empty_mempool_warning_printed = False
 
     def _get_primary_for_view(self, view_number: int) -> str:
         if not self.validators:
@@ -1071,21 +1078,34 @@ class D_BFT_Consensus:
 
 
     async def _propose_block(self):
-        print(f"[D-BFT] Primary {self.validator_id} đang đề xuất block {self.sequence_number} với {len(self.blockchain.mempool)} giao dịch.")
-
-        #transactions_to_include = list(self.blockchain.mempool.values())[:self.tx_batch_size]
         # Lấy tất cả giao dịch từ mempool
         all_transactions = list(self.blockchain.mempool.values())
 
         # Lọc theo shard_id
         filtered_transactions = self._filter_transactions_for_shard(all_transactions, self.blockchain.shard_id)
 
+        # Lọc các giao dịch hợp lệ bằng simulate_transaction
+        valid_transactions = []
+        for tx in filtered_transactions:
+            if self.blockchain.state_db.simulate_transaction(tx):
+                valid_transactions.append(tx)
+            if not self.invalid_tx_warning_printed:
+                print(f"[D-BFT] ⚠️ Bỏ qua giao dịch không hợp lệ: {tx.txid[:10]}...")
+                self.invalid_tx_warning_printed = True
+
         # Giới hạn theo batch size
-        transactions_to_include = filtered_transactions[:self.tx_batch_size]
+        transactions_to_include = valid_transactions[:self.tx_batch_size]
+
 
         if not transactions_to_include:
-            print("[D-BFT] Mempool trống, không có giao dịch để đề xuất block.")
+            if not self.empty_mempool_warning_printed:
+                print("[D-BFT] Mempool trống, không có giao dịch để đề xuất block.")
+                self.empty_mempool_warning_printed = True
             return
+        else:
+            self.empty_mempool_warning_printed = False
+            self.invalid_tx_warning_printed = False
+            print(f"[D-BFT] Primary {self.validator_id} đang đề xuất block {self.sequence_number} với {len(self.blockchain.mempool)} giao dịch.")
 
         new_block = Block(
             index=self.blockchain.get_latest_block().index + 1,

@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives import serialization, hashes
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.backends import default_backend
-from api_server import run_api
+from api_server_quart import initialize_quart_globals
 import requests
 
 
@@ -107,110 +107,100 @@ def load_or_generate_tls_certs(current_node_id: str, host_ip: str, all_validator
     return private_key_pem, certificate_pem, ssl_context_server, ssl_context_client
 
 
-async def main():
-    node_id = os.environ.get("NODE_ID")
-    shard_id = int(os.environ.get("SHARD_ID", "0"))
-    node_host = os.environ.get("NODE_HOST", "0.0.0.0")
-    node_port = int(os.environ.get("P2P_PORT", "9000"))
-    api_port = int(os.environ.get("PORT", "5001"))
-    is_validator = os.environ.get("IS_VALIDATOR", "true").lower() == "true"
-    all_validator_ids = os.environ.get("ALL_VALIDATOR_IDS", "").split(",")
-
-    private_key_pem_tls, certificate_pem_tls, ssl_server_ctx, ssl_client_ctx = load_or_generate_tls_certs(
-        node_id, node_host, all_validator_ids)
-
-    blockchain = VietIDBlockchain(node_id, shard_id)
-    blockchain.validator_shards = {
-        0: ["node1"],
-        1: ["node2"],
-        2: ["node3"]
-    }
-
-    wallet_dir = os.path.join(os.getcwd(), f"node_data_{node_id}")
-    os.makedirs(wallet_dir, exist_ok=True)
-    wallet_file = os.path.join(wallet_dir, f"wallet_{node_id}.json")
-
-    if os.path.exists(wallet_file):
-        with open(wallet_file, 'r') as f:
-            wallet_data = json.load(f)
-        private_key_pem = wallet_data.get("private_key_pem", "").encode("utf-8")
-        sender_wallet = Wallet(private_key_pem=private_key_pem)
-    else:
-        sender_wallet = Wallet()
-        with open(wallet_file, 'w') as f:
-            json.dump({
-                "private_key_pem": sender_wallet.private_key_pem.decode('utf-8'),
-                "public_key_pem": sender_wallet.public_key_pem.decode('utf-8'),
-                "alias": sender_wallet.alias,
-                "address": sender_wallet.address
-            }, f, indent=4)
-    print(f"✅ Wallet: {sender_wallet.address}")
-
-    node = P2PNode(
-        node_id=node_id,
-        host=node_host,
-        port=node_port,
-        blockchain=blockchain,
-        ssl_context_server=ssl_server_ctx,
-        ssl_context_client=ssl_client_ctx
-    )
-    blockchain.p2p_node = node
-    node.message_processor_task = asyncio.create_task(node._process_message_queue())
-
-    validators = blockchain.validator_shards.get(shard_id, [])
-
-    consensus = D_BFT_Consensus(
-        blockchain=blockchain,
-        node_id=node_id,
-        p2p_node=node,
-        is_primary=is_validator,
-        validator_private_key_ecc=sender_wallet.private_key_ecc,
-        validator_public_key_ecc=sender_wallet.public_key_ecc,
-        validators=validators,
-        view_timeout=10,
-        tx_batch_size=3
-    )
-
-    blockchain.dbft_consensus = consensus
-    node.consensus = consensus
-
-    threading.Thread(target=run_api, args=(blockchain, node, sender_wallet), daemon=True).start()
-
-    # Kết nối tới các PEER nếu có
-    peer_nodes = os.environ.get("PEER_NODES", "").split(",")
-    for peer in peer_nodes:
-        try:
-            peer_id, peer_host, peer_port = peer.split(":")
-            asyncio.create_task(node.connect_to_peer(peer_host, int(peer_port), node_id))
-        except Exception as e:
-            print(f"[P2P] ❌ Lỗi PEER_NODES parse: {peer} → {e}")
-
-    tasks = [
-        asyncio.create_task(node.run_server()),
-        asyncio.create_task(consensus.run_consensus_loop()),
-    ]
-
-    try:
-        await asyncio.gather(*tasks)
-    except KeyboardInterrupt:
-        print("[Main] ❗ Dừng bởi người dùng.")
-    finally:
-        print("[Main] 🔻 Dọn dẹp node...")
-        if node.server:
-            node.server.close()
-            await node.server.wait_closed()
-        if node.message_processor_task:
-            node.message_processor_task.cancel()
-            try:
-                await node.message_processor_task
-            except asyncio.CancelledError:
-                pass
-        if consensus.consensus_loop_task:
-            consensus.consensus_loop_task.cancel()
-            try:
-                await consensus.consensus_loop_task
-            except asyncio.CancelledError:
-                pass
-
 if __name__ == "__main__":
+    import asyncio
+    from api_server_quart import app, initialize_quart_globals
+
+    async def main():
+        node_id = os.environ.get("NODE_ID")
+        shard_id = int(os.environ.get("SHARD_ID", "0"))
+        node_host = os.environ.get("NODE_HOST", "0.0.0.0")
+        node_port = int(os.environ.get("P2P_PORT", "9000"))
+        api_port = int(os.environ.get("PORT", "5000"))
+        is_validator = os.environ.get("IS_VALIDATOR", "true").lower() == "true"
+        all_validator_ids = os.environ.get("ALL_VALIDATOR_IDS", "").split(",")
+
+        private_key_pem_tls, certificate_pem_tls, ssl_server_ctx, ssl_client_ctx = load_or_generate_tls_certs(
+            node_id, node_host, all_validator_ids)
+
+        blockchain = VietIDBlockchain(node_id, shard_id)
+        blockchain.validator_shards = {
+            0: ["node1"],
+            1: ["node2"],
+            2: ["node3"]
+        }
+
+        wallet_dir = os.path.join(os.getcwd(), f"node_data_{node_id}")
+        os.makedirs(wallet_dir, exist_ok=True)
+        wallet_file = os.path.join(wallet_dir, f"wallet_{node_id}.json")
+
+        if os.path.exists(wallet_file):
+            with open(wallet_file, 'r') as f:
+                wallet_data = json.load(f)
+            private_key_pem = wallet_data.get("private_key_pem", "").encode("utf-8")
+            sender_wallet = Wallet(private_key_pem=private_key_pem)
+        else:
+            sender_wallet = Wallet()
+            with open(wallet_file, 'w') as f:
+                json.dump({
+                    "private_key_pem": sender_wallet.private_key_pem.decode('utf-8'),
+                    "public_key_pem": sender_wallet.public_key_pem.decode('utf-8'),
+                    "alias": sender_wallet.alias,
+                    "address": sender_wallet.address
+                }, f, indent=4)
+
+        node = P2PNode(
+            node_id=node_id,
+            host=node_host,
+            port=node_port,
+            blockchain=blockchain,
+            ssl_context_server=ssl_server_ctx,
+            ssl_context_client=ssl_client_ctx
+        )
+        blockchain.p2p_node = node
+
+        consensus = D_BFT_Consensus(
+            blockchain=blockchain,
+            node_id=node_id,
+            p2p_node=node,
+            is_primary=is_validator,
+            validator_private_key_ecc=sender_wallet.private_key_ecc,
+            validator_public_key_ecc=sender_wallet.public_key_ecc,
+            validators=blockchain.validator_shards.get(shard_id, []),
+            view_timeout=10,
+            tx_batch_size=3
+        )
+
+        blockchain.dbft_consensus = consensus
+        node.consensus = consensus
+
+        node.message_processor_task = asyncio.create_task(node._process_message_queue())
+        #asyncio.create_task(node.run_server())
+        asyncio.create_task(consensus.run_consensus_loop())
+
+        # Kết nối tới PEERS
+        peer_nodes = os.environ.get("PEER_NODES", "").split(",")
+        for peer in peer_nodes:
+            try:
+                peer_id, peer_host = peer.split(":")
+                asyncio.create_task(node.connect_to_peer(peer_host.strip(), node_id))
+            except Exception as e:
+                print(f"[P2P] ❌ Lỗi PEER_NODES parse: {peer} → {e}")
+
+        # Khởi tạo biến toàn cục cho Quart app (để WebSocket truy cập được)
+        initialize_quart_globals(blockchain, node, sender_wallet)
+
+        # Đường dẫn chứng chỉ TLS
+        cert_path = os.path.join(os.getcwd(), f"node_data_{node_id}", f"{node_id}.pem")
+        key_path = os.path.join(os.getcwd(), f"node_data_{node_id}", f"{node_id}_key.pem")
+
+        # Khởi chạy Web server chính trên port 5000 (duy nhất Render nhận)
+        await app.run_task(
+            host="0.0.0.0",
+            port=api_port,
+            #certfile=cert_path,
+            #keyfile=key_path
+        )
+
+
     asyncio.run(main())

@@ -3,3 +3,5 @@ websockets==11.0.3 # Or your preferred version
 ecdsa==0.18.0 # Or your preferred version
 cryptography==41.0.3 # Or your preferred version
 requests==2.32.4
+werkzeug==2.3.7
+quart==0.18.3
