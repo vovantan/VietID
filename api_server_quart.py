@@ -1,4 +1,4 @@
-from vietid17 import Transaction, Wallet, hash_message, schnorr_sign
+from vietid17 import Transaction, Wallet, hash_message, schnorr_sign, StateDB
 #from flask import Flask, jsonify, request, send_file
 from quart import Quart, request, jsonify, websocket, send_file
 from datetime import datetime, timezone
@@ -58,14 +58,26 @@ async def get_balance(address):
     return jsonify({"address": address, "balance": balance})
 
 @app.route('/did/list', methods=['GET'])
-async def get_did_list():
-    return jsonify(blockchain.state_db.did_registry)
+def get_did_list():
+    safe_registry = {}
+    for did, data in blockchain.state_db.did_registry.items():
+        safe_registry[did] = {
+            "alias": data.get("alias"),
+            "public_key_tuple": list(data.get("public_key_tuple", [])),
+            "public_key_bytes": data.get("public_key_bytes").hex() if isinstance(data.get("public_key_bytes"), bytes) else data.get("public_key_bytes")
+        }
+    return jsonify(safe_registry)
+
 
 @app.route('/did/<did>', methods=['GET'])
-async def get_did_info(did):
+def get_did_info(did):
     data = blockchain.state_db.did_registry.get(did)
     if data:
-        return jsonify(data)
+        return jsonify({
+            "alias": data.get("alias"),
+            "public_key_tuple": list(data.get("public_key_tuple", [])),
+            "public_key_bytes": data.get("public_key_bytes").hex() if isinstance(data.get("public_key_bytes"), bytes) else data.get("public_key_bytes")
+        })
     return jsonify({"error": "DID not found"}), 404
 
 @app.route('/mempool', methods=['GET'])
@@ -134,10 +146,26 @@ async def send_transaction():
 
         recipient = data["recipient"]
         amount = int(data["amount"])
+        # Xác định recipient_public_key_bytes từ recipient (có thể là pubkey hoặc address)
+        recipient_public_key_bytes = None
+
+        if len(recipient) in (66, 130):  # public key hex (compressed/uncompressed)
+            recipient_public_key_bytes = bytes.fromhex(recipient)
+        elif len(recipient) == 40:  # address dạng hex
+            recipient_pubkey = blockchain.state_db.get_pubkey_by_address(recipient)
+            if not recipient_pubkey:
+                return jsonify({
+                    "status": "error",
+                    "message": f"Cannot resolve address {recipient} to public key"
+                }), 400
+            recipient_public_key_bytes = recipient_pubkey
+        else:
+            return jsonify({"status": "error", "message": "Invalid recipient format"}), 400
 
         tx = Transaction(
             sender_public_key_bytes=wallet.public_key_raw_bytes,
-            recipient_public_key_bytes=bytes.fromhex(recipient),
+            #recipient_public_key_bytes=bytes.fromhex(recipient),
+            recipient_public_key_bytes=recipient_public_key_bytes,
             amount=amount,
             tx_type="TRANSFER",
             data=""
