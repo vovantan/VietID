@@ -410,22 +410,26 @@ class StateDB:
                     print(f"[StateDB] Giao dịch TRANSFER {tx.txid[:10]}... không đủ số dư của người gửi hoặc người gửi không tồn tại.")
                     return False # Giao dịch không hợp lệ, không thể áp dụng block này
             elif tx.tx_type == "DID_REGISTER":
-                # Giả định đối tượng Transaction có trường data với 'did' và 'public_key_tuple'
-                # Và có thể cả 'alias'
                 try:
-                    tx_data = json.loads(tx.data) # Giả định data là một chuỗi JSON
+                    tx_data = json.loads(tx.data)
                     did = tx_data.get("did")
                     public_key_list = tx_data.get("public_key_tuple")
                     alias = tx_data.get("alias")
-                    
+
                     if not did or not public_key_list:
                         print(f"[StateDB] Giao dịch DID_REGISTER {tx.txid[:10]}... thiếu thông tin cần thiết.")
                         return False
 
-                    # Chuyển list từ JSON thành tuple cho public_key_tuple
-                    if not self.register_did(did, tuple(public_key_list), alias):
-                        print(f"[StateDB] Giao dịch DID_REGISTER {tx.txid[:10]}... không thể đăng ký DID.")
-                        return False
+                    public_key_tuple = tuple(public_key_list)
+                    public_key_bytes = tx.sender_public_key_bytes
+
+                    self.did_registry[did] = {
+                        "alias": alias,
+                        "public_key_tuple": public_key_tuple,
+                        "public_key_bytes": tx.sender_public_key_bytes  # ✅ cần thiết để tra lại từ address
+                    }
+
+                    print(f"[StateDB] Đã đăng ký DID: {did} (Alias: {alias})")
                 except json.JSONDecodeError:
                     print(f"[StateDB] Giao dịch DID_REGISTER {tx.txid[:10]}... dữ liệu không phải JSON hợp lệ.")
                     return False
@@ -749,7 +753,24 @@ class StateDB:
     def get_total_supply(self) -> int:
         return self.total_supply
 
+    def get_pubkey_by_address(self, address: str) -> bytes | None:
+        print("[DEBUG] Toàn bộ DID registry:")
+        for did, data in self.did_registry.items():
+            pubkey = data.get("public_key_bytes")
+            if pubkey:
+                derived_address = self.hash_public_key_bytes(pubkey)
+                print(f"[DEBUG] So sánh {address} <=> {derived_address} từ DID {did}")
+                if derived_address == address:
+                    print("[DEBUG] ✅ Khớp địa chỉ!")
+                    return pubkey
+        print(f"[DEBUG] ❌ Không tìm thấy địa chỉ {address} trong did_registry")
+        return None
 
+
+    def hash_public_key_bytes(self, pubkey: bytes) -> str:
+        sha = hashlib.sha256(pubkey).digest()
+        ripemd = hashlib.new('ripemd160', sha).hexdigest()
+        return ripemd
 # =============================================================================
 # Blockchain
 # =============================================================================
