@@ -128,14 +128,15 @@ async def get_governance_proposal(proposal_id):
 # In api_server.py, find the get_governance_votes route:
 
 @app.route('/governance/votes/<proposal_id>', methods=['GET'])
-async def get_governance_votes(proposal_id):
+def get_governance_votes(proposal_id):
     proposal = blockchain.state_db.governance_proposals.get(proposal_id)
     if proposal:
-        # Correctly access votes_for and votes_against directly
         return jsonify({
             "proposal_id": proposal_id,
-            "votes_for": proposal.get("votes_for", 0),      # <--- CHANGE THIS LINE
-            "votes_against": proposal.get("votes_against", 0) # <--- CHANGE THIS LINE
+            "votes_for": proposal.get("votes", {}).get("YES", 0),
+            "votes_against": proposal.get("votes", {}).get("NO", 0),
+            "finalized": proposal.get("finalized"),
+            "result": proposal.get("result")
         })
     return jsonify({"error": f"proposal_id {proposal_id} not found"}), 404
 
@@ -235,17 +236,23 @@ async def send_special_tx(tx_type):
         elif tx_type == "PROPOSE":
             proposal_id = data["proposal_id"]
             description = data["description"]
-            title = data.get("title", "")  # lấy nếu có
+            title = data.get("title", "")
+            action = data.get("action")
+            mint_target = data.get("mint_target")
+            amount = data.get("amount")
+
             tx = Transaction(
                 sender_public_key_bytes=wallet.public_key_raw_bytes,
-                recipient_public_key_bytes=b"",  # để trống nếu không cần nhận
+                recipient_public_key_bytes=b"",
                 amount=0,
-                #tx_type="PROPOSE",
                 tx_type="GOVERNANCE_PROPOSAL",
                 data=json.dumps({
                     "proposal_id": proposal_id,
                     "title": title,
-                    "description": description
+                    "description": description,
+                    "action": action,
+                    "mint_target": mint_target,
+                    "amount": amount
                 })
             )
 
