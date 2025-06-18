@@ -581,78 +581,56 @@ class StateDB:
                 '''
             elif tx.tx_type == "GOVERNANCE_PROPOSAL":
                 try:
+                    print(f"[DEBUG] tx.data = {tx.data}")
                     proposal_data = json.loads(tx.data)
-                    proposal_id = proposal_data.get("proposal_id")
-                    title = proposal_data.get("title", "")
+                    proposal_id = proposal_data["proposal_id"]
                     description = proposal_data.get("description", "")
 
-                    if not proposal_id:
-                        print(f"[Governance] ❌ Giao dịch GOVERNANCE_PROPOSAL {tx.txid[:10]}... thiếu proposal_id.")
-                        return False # Giao dịch không hợp lệ
-
-                    if proposal_id in self.governance_proposals:
-                        print(f"[Governance] ⚠️ Đề xuất {proposal_id} đã tồn tại. Bỏ qua.")
-                        # Tùy chọn: bạn có thể chọn trả về False nếu không muốn trùng lặp
-                        # hoặc True nếu coi việc này là một cập nhật/re-submission hợp lệ.
-                        # Hiện tại, nếu đã tồn tại, chúng ta không ghi đè.
-                        return True # Coi là đã xử lý thành công vì đề xuất đã có
-
-                    self.governance_proposals[proposal_id] = {
-                        "title": title,
-                        "description": description,
-                        "proposer": tx.sender_public_key_bytes.hex(), # Lưu người đề xuất
-                        "timestamp": tx.timestamp,
-                        "votes_for": 0,
-                        "votes_against": 0,
-                        "voters": set(), # public_key_hex của những người đã vote
-                        "finalized": False,
-                        "result": None # "PASSED" | "REJECTED" | None
-                    }
-                    print(f"[Governance] ✅ Đã thêm đề xuất: {proposal_id}")
-                except json.JSONDecodeError:
-                    print(f"[Governance] ❌ Giao dịch GOVERNANCE_PROPOSAL {tx.txid[:10]}... dữ liệu không phải JSON hợp lệ.")
-                    return False
+                    if proposal_id not in self.governance_proposals or not self.governance_proposals[proposal_id]["finalized"]:
+                        self.governance_proposals[proposal_id] = {
+                            "description": description,
+                            "votes": {"YES": 0, "NO": 0},
+                            "voters": set(),
+                            "finalized": False,
+                            "result": None,
+                            "action": proposal_data.get("action"),
+                            "mint_target": proposal_data.get("mint_target"),
+                            "amount": proposal_data.get("amount"),
+                        }
+                    print(f"[GOV] 🗳️ Đã tạo đề xuất '{proposal_id}'")
                 except Exception as e:
-                    print(f"[Governance] ❌ Lỗi khi xử lý GOVERNANCE_PROPOSAL {tx.txid[:10]}...: {e}")
+                    print(f"[GOV] ❌ Lỗi khi xử lý GOVERNANCE_PROPOSAL: {e}")
                     return False
 
-            elif tx.tx_type == "VOTE": # <--- ENSURE THIS BLOCK IS UPDATED TO USE self.governance_proposals
+            elif tx.tx_type == "VOTE":
                 try:
                     vote_data = json.loads(tx.data)
-                    proposal_id = vote_data.get("proposal_id")
-                    vote_choice = vote_data.get("vote") # "YES" hoặc "NO"
-                    voter_address = tx.sender_public_key_bytes.hex() # Lấy địa chỉ người vote
+                    proposal_id = vote_data["proposal_id"]
+                    vote = vote_data["vote"]  # "YES" hoặc "NO"
+                    pubkey_hex = tx.sender_public_key_bytes.hex()
 
-                    if not proposal_id or vote_choice not in ["YES", "NO"]:
-                        print(f"[Governance] ❌ Giao dịch VOTE {tx.txid[:10]}... thiếu thông tin hoặc vote không hợp lệ.")
+                    proposal = self.governance_proposals.get(proposal_id)
+                    if not proposal:
+                        print(f"[GOV] ❌ Đề xuất '{proposal_id}' không tồn tại.")
+                        return False
+                    if proposal["finalized"]:
+                        print(f"[GOV] ⛔ Đề xuất '{proposal_id}' đã kết thúc.")
+                        return False
+                    if pubkey_hex in proposal["voters"]:
+                        print(f"[GOV] ⛔ Người dùng đã vote cho '{proposal_id}'")
                         return False
 
-                    if proposal_id not in self.governance_proposals: # <--- Kiểm tra ở đây
-                        print(f"[Governance] ❌ Không tìm thấy đề xuất {proposal_id} để bầu chọn.")
+                    if vote not in ("YES", "NO"):
+                        print(f"[GOV] ❌ Phiếu không hợp lệ.")
                         return False
 
-                    proposal = self.governance_proposals[proposal_id]
+                    proposal["votes"][vote] += 1
+                    proposal["voters"].add(pubkey_hex)  # ✅ Đúng với kiểu `set`
+                    print(f"[GOV] 🗳️ Vote '{vote}' cho '{proposal_id}' từ {pubkey_hex[:10]}...")
 
-                    if voter_address in proposal["voters"]:
-                        print(f"[Governance] ⚠️ Người dùng {voter_address[:10]}... đã bầu cho đề xuất {proposal_id}.")
-                        return True # Coi là đã xử lý thành công vì người dùng đã vote
-
-                    if vote_choice == "YES":
-                        proposal["votes_for"] += 1
-                    elif vote_choice == "NO":
-                        proposal["votes_against"] += 1
-                    
-                    proposal["voters"].add(voter_address) # Lưu người đã vote
-
-                    print(f"[Governance] ✅ Đã xử lý phiếu bầu cho đề xuất {proposal_id} ({vote_choice}) từ {voter_address[:10]}...")
-
-                    # Tùy chọn: Thêm logic để kiểm tra và finalize đề xuất nếu đạt đủ số phiếu
-
-                except json.JSONDecodeError:
-                    print(f"[Governance] ❌ Giao dịch VOTE {tx.txid[:10]}... dữ liệu không phải JSON hợp lệ.")
-                    return False
+                    self.try_finalize_proposal(proposal_id)
                 except Exception as e:
-                    print(f"[Governance] ❌ Lỗi khi xử lý giao dịch VOTE {tx.txid[:10]}...: {e}")
+                    print(f"[GOV] ❌ Lỗi xử lý phiếu vote: {e}")
                     return False
                 '''
                 elif tx.tx_type == "MINT":
@@ -706,7 +684,48 @@ class StateDB:
                 return True
             
         return True # Tất cả giao dịch đã được áp dụng thành công
+        
+    def try_finalize_proposal(self, proposal_id):
+        proposal = self.governance_proposals.get(proposal_id)
+        if not proposal or proposal["finalized"]:
+            return False
 
+        quorum = 2
+        yes = proposal["votes"]["YES"]
+        no = proposal["votes"]["NO"]
+
+        print(f"[DEBUG] ✅ Đang kiểm tra đề xuất '{proposal_id}' | YES: {yes}, NO: {no}, quorum: {quorum}")
+
+        if yes + no >= quorum:
+            if yes > no:
+                proposal["result"] = "PASSED"
+                print(f"[GOV] ✅ Đề xuất '{proposal_id}' đã PASSED")
+
+                if proposal.get("action") == "MINT":
+                    target = proposal.get("mint_target")
+                    try:
+                        amount = int(proposal.get("amount", 0))
+                    except Exception as e:
+                        print(f"[GOV] ❌ amount không hợp lệ: {e}")
+                        amount = 0
+
+                    print(f"[DEBUG] Chuẩn bị MINT {amount} token cho {target}")
+                    if target and amount > 0:
+                        self.update_balance(target, amount)
+                        self.total_supply += amount
+                        proposal["executed"] = True
+                        print(f"[TOKEN] 💸 MINT {amount} token cho {target}")
+                    else:
+                        print(f"[GOV] ❌ Thiếu thông tin MINT hoặc amount = 0")
+            else:
+                proposal["result"] = "REJECTED"
+                print(f"[GOV] ❌ Đề xuất '{proposal_id}' bị REJECTED")
+
+            proposal["finalized"] = True
+            return True
+
+        return False
+        
     def create_snapshot(self, block_index: int, block_hash: str):
         # Tạo một snapshot của trạng thái hiện tại
         current_state = {
