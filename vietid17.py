@@ -343,18 +343,7 @@ class StateDB:
         self.cross_shard_messages = []
         self.total_supply = 0
         self.proposals = {}
-        self.governance_proposals = {
-            "proposal_id_abc": {
-                "description": "Giảm phí giao dịch",
-                "votes": {
-                    "YES": 300,
-                    "NO": 100
-                },
-                "voters": set(),  # public_key_hex
-                "finalized": False,
-                "result": None  # "PASSED" | "REJECTED" | None
-            },
-        }
+        self.governance_proposals = {}
         
     def register_did(self, did: str, public_key_tuple: tuple, alias: str = None) -> bool:
         if did in self.did_registry:
