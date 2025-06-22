@@ -425,76 +425,42 @@ class StateDB:
                 except Exception as e:
                     print(f"[StateDB] Lỗi khi xử lý giao dịch DID_REGISTER {tx.txid[:10]}...: {e}")
                     return False
-                '''
-                # Đoạn này đòi hỏi phải có số dư
-                elif tx.tx_type == "CROSS_TRANSFER":
-                    try:
-                        tx_data = json.loads(tx.data)
-                        to_shard = tx_data["to_shard"]
-                        recipient = tx_data["recipient_address"]
-                        amount = tx_data["amount"]
 
-                        sender_address = hashlib.sha256(tx.sender_public_key_bytes).hexdigest()
-                        
-                        if self.balance[sender_address]: >= amount: # tạm thời không đặt điều kiện với số dư
+            elif tx.tx_type == "CROSS_TRANSFER":
+                try:
+                    tx_data = json.loads(tx.data)
+                    from_shard = tx_data["from_shard"]
+                    recipient = tx_data["recipient"]
+                    amount = tx_data["amount"]
+                    to_shard = tx_data["to_shard"]
+
+                    if self.shard_id == from_shard:
+                        sender_address = sender_address = Wallet.public_key_bytes_to_address(tx.sender_public_key_bytes)#hashlib.sha256(tx.sender_public_key_bytes).hexdigest()
+
+                        if self.balance[sender_address] >= amount:
                             self.update_balance(sender_address, -amount)
                             print(f"[StateDB] ✅ CROSS_TRANSFER: -{amount} từ {sender_address[:10]}...")
 
-                            # ✅ Trả về RECEIVE_TRANSFER để xử lý sau
                             receive_tx = Transaction(
                                 sender_public_key_bytes=b'',
                                 recipient_public_key_bytes=b'',
                                 amount=amount,
                                 tx_type="RECEIVE_TRANSFER",
                                 data=json.dumps({
-                                    "recipient_address": recipient,
-                                    "amount": amount
+                                    "recipient": recipient,
+                                    "amount": amount,
+                                    "to_shard": to_shard
                                 }),
                                 timestamp=datetime.utcnow().isoformat() + "Z"
                             )
 
-                            # 👉 Lưu vào self.cross_shard_messages để xử lý sau
                             if hasattr(self, "cross_shard_messages"):
                                 self.cross_shard_messages.append((to_shard, receive_tx))
-                            return True
+                                print(f"[StateDB] 📤 Chuẩn bị gửi RECEIVE_TRANSFER sang shard {to_shard}")
                         else:
                             print(f"[StateDB] ❌ Không đủ số dư.")
                             return False
-                '''
-            # Đoạn này dùng để test với số dư chấp nhận là số âm
-            elif tx.tx_type == "CROSS_TRANSFER":
-                try:
-                    tx_data = json.loads(tx.data)
-                    from_shard = tx_data["from_shard"]
-                    recipient = tx_data["recipient_address"]
-                    amount = tx_data["amount"]
-                    to_shard = tx_data["to_shard"] #int(hashlib.sha256(recipient.encode()).hexdigest(), 16) % 3
 
-                    if self.shard_id == from_shard:
-                        sender_address = hashlib.sha256(tx.sender_public_key_bytes).hexdigest()
-                        self.update_balance(sender_address, -amount)
-                        print(f"[StateDB] ✅ CROSS_TRANSFER: -{amount} từ {sender_address[:10]}...")
-                        print(f"[DEBUG] CROSS_TRANSFER đang xử lý: from {from_shard} → {to_shard}")
-                        print(f"[DEBUG] Tạo RECEIVE_TRANSFER gửi đến shard {to_shard}")
-
-                        receive_tx = Transaction(
-                            sender_public_key_bytes=b'',
-                            recipient_public_key_bytes=b'',
-                            amount=amount,
-                            tx_type="RECEIVE_TRANSFER",
-                            data=json.dumps({
-                                "recipient_address": recipient,
-                                "amount": amount,
-                                "to_shard": to_shard
-                            }),
-                            timestamp=datetime.utcnow().isoformat() + "Z"
-                        )
-                        print(f"[DEBUG] RECEIVE_TRANSFER tx: {receive_tx.to_dict()}")
-
-
-                        if hasattr(self, "cross_shard_messages"):
-                            self.cross_shard_messages.append((to_shard, receive_tx))
-                            print(f"[StateDB] 📤 Chuẩn bị gửi RECEIVE_TRANSFER sang shard {to_shard}")
                     else:
                         print(f"[StateDB] ⏩ Bỏ qua CROSS_TRANSFER vì không phải shard nguồn")
                     return True
@@ -504,73 +470,16 @@ class StateDB:
             elif tx.tx_type == "RECEIVE_TRANSFER":
                 try:
                     tx_data = json.loads(tx.data)
-                    recipient = tx_data["recipient_address"]
+                    recipient = tx_data["recipient"]
                     amount = tx_data["amount"]
                     self.update_balance(recipient, amount)
                     print(f"[StateDB] ✅ RECEIVE_TRANSFER: +{amount} vào {recipient[:10]}...")
                 except Exception as e:
                     print(f"[StateDB] ❌ Lỗi xử lý RECEIVE_TRANSFER: {e}")
                     return False
-                '''
-                elif tx.tx_type == "GOVERNANCE_PROPOSAL":
-                    proposal = json.loads(tx.data)
-                    pid = proposal["proposal_id"]
-                    desc = proposal["description"]
-                    if pid not in self.governance_proposals:
-                        self.governance_proposals[pid] = {"description": desc, "votes": {"YES": 0, "NO": 0}}
-                        print(f"[Governance] 🗳️ Đề xuất mới: {pid} - {desc}")
-                    else:
-                        print(f"[Governance] ⚠️ Đề xuất {pid} đã tồn tại.")
-                        return False
-                elif tx.tx_type == "VOTE":
-                    vote = json.loads(tx.data)
-                    pid = vote["proposal_id"]
-                    choice = vote["vote"]
 
-                    if pid in self.governance_proposals:
-                        sender_key = tx.sender_address
-
-                        proposal = self.governance_proposals[pid]
-
-                        if sender_key in proposal.get("voters", set()):
-                            print(f"[Governance] ⚠️ {sender_key[:10]}... đã vote cho {pid} trước đó.")
-                            return False
-                        
-                        # Trọng số = số dư token
-                        weight = self.get_balance(sender_key)
-                        
-                        if weight == 0:
-                            print(f"[Governance] ❌ {sender_key[:10]}... không có token để vote.")
-                            return False
-                        # sử dụng đoạn này phải thực hiện MINT trước
-                        
-                        #if weight == 0:
-                            #print(f"[Governance] ⚠️ {sender_key[:10]}... không có token, vote trọng số = 1.")
-                            #weight = 1  # cho phép vote, coi như 1 token
-                        
-                        proposal["votes"][choice] += weight
-                        proposal.setdefault("voters", set()).add(sender_key)
-                        print(f"[Governance] ✅ {sender_key[:10]}... vote {choice} (trọng số {weight}) cho {pid}. Tổng YES: {proposal['votes']['YES']}, NO: {proposal['votes']['NO']}")
-
-                        # Xét duyệt nếu đủ điều kiện
-                        total_votes = proposal["votes"]["YES"] + proposal["votes"]["NO"]
-                        yes_ratio = proposal["votes"]["YES"] / total_votes if total_votes else 0
-
-                        if yes_ratio >= 0.66:  # 2/3 đồng thuận
-                            proposal["finalized"] = True
-                            proposal["result"] = "PASSED"
-                            print(f"[Governance] ✅ Đề xuất {pid} đã được thông qua.")
-                        elif proposal["votes"]["NO"] > proposal["votes"]["YES"]:
-                            proposal["finalized"] = True
-                            proposal["result"] = "REJECTED"
-                            print(f"[Governance] ❌ Đề xuất {pid} đã bị từ chối.")
-                    else:
-                        print(f"[Governance] ❌ Không tìm thấy đề xuất {pid}")
-                        return False
-                '''
-            elif tx.tx_type == "GOVERNANCE_PROPOSAL":
+            elif tx.tx_type == "PROPOSE":
                 try:
-                    print(f"[DEBUG] tx.data = {tx.data}")
                     proposal_data = json.loads(tx.data)
                     proposal_id = proposal_data["proposal_id"]
                     description = proposal_data.get("description", "")
@@ -586,9 +495,9 @@ class StateDB:
                             "mint_target": proposal_data.get("mint_target"),
                             "amount": proposal_data.get("amount"),
                         }
-                    print(f"[GOV] 🗳️ Đã tạo đề xuất '{proposal_id}'")
+                    print(f"[GOV] 🗳️ Đã tạo đề xuất MINT '{proposal_id}'")
                 except Exception as e:
-                    print(f"[GOV] ❌ Lỗi khi xử lý GOVERNANCE_PROPOSAL: {e}")
+                    print(f"[GOV] ❌ Lỗi khi xử lý MINT_PROPOSAL: {e}")
                     return False
 
             elif tx.tx_type == "VOTE":
@@ -621,20 +530,8 @@ class StateDB:
                 except Exception as e:
                     print(f"[GOV] ❌ Lỗi xử lý phiếu vote: {e}")
                     return False
-                '''
-                elif tx.tx_type == "MINT":
-                    data = json.loads(tx.data)
-                    recipient = data["recipient_address"]
-                    amount = data["amount"]
-                    if amount > 0:
-                        self.balance[recipient] += amount
-                        self.total_supply += amount
-                        print(f"[Tokenomics] ✅ MINT {amount} token đến {recipient[:10]}..., tổng cung: {self.total_supply}")
-                        return True
-                    else:
-                        print("[Tokenomics] ❌ Số lượng MINT không hợp lệ.")
-                        return False
-                '''
+
+
             elif tx.tx_type == "MINT":
                 if not tx.data:
                     print(f"[⚠️ MINT] Dữ liệu rỗng, bỏ qua giao dịch {tx.txid[:10]}...")
@@ -654,23 +551,6 @@ class StateDB:
                 except Exception as e:
                     print(f"[❌ MINT] Lỗi khi xử lý dữ liệu JSON: {e}")
                     return False
-            
-            elif tx.tx_type == "PROPOSE":
-                proposal = json.loads(tx.data)
-                proposal_id = proposal["proposal_id"]
-                title = proposal.get("title", "")
-                description = proposal["description"]
-                self.proposals[proposal_id] = {
-                    "title": title,
-                    "description": description,
-                    "creator": tx.sender_public_key_bytes.hex(),
-                    "votes": {"YES": 0, "NO": 0},
-                    "voters": [],
-                    "finalized": False,
-                    "result": None
-                }
-                print(f"[Governance] ✅ Đã thêm đề xuất: {proposal_id}")
-                return True
             
         return True # Tất cả giao dịch đã được áp dụng thành công
         
@@ -982,7 +862,7 @@ class VietIDBlockchain:
         self.state_db.did_registry = state_data["did_registry"]
         print("[Blockchain] Đã tải trạng thái từ snapshot.")
     
-    def add_transaction_to_mempool(self, transaction: 'Transaction') -> bool: # 'Transaction' for forward reference
+    def add_transaction_to_mempool(self, transaction: 'Transaction') -> tuple[bool, str | None]:#-> bool: # 'Transaction' for forward reference
         """
         Adds a transaction to the mempool after basic validation.
         Returns True if added successfully, False otherwise.
@@ -995,9 +875,46 @@ class VietIDBlockchain:
             print(f"[Mempool] Giao dịch {transaction.txid[:10]}... đã tồn tại trong mempool.")
             return False
 
+        if transaction.tx_type == "DID_REGISTER":
+            try:
+                tx_data = json.loads(transaction.data)
+                did = tx_data.get("did")
+                if did in self.state_db.did_registry:
+                    return False, f"This account has registered DID!"
+            except Exception as e:
+                return False, f"Lỗi khi kiểm tra DID_REGISTER: {e}"
+
+        if transaction.tx_type == "PROPOSE":
+            try:
+                proposal_data = json.loads(transaction.data)
+                proposal_id = proposal_data.get("proposal_id")
+                if proposal_id in self.state_db.governance_proposals:
+                    return False, f"Proposal '{proposal_id}' already exists!"
+            except Exception as e:
+                print(f"[Governance] ❌ Lỗi khi kiểm tra proposal_id: {e}")
+                return False
+
+        # ⛔ Chặn TRANSFER nếu không đủ số dư
+        if transaction.tx_type == "TRANSFER":
+            if transaction.sender_address not in self.state_db.balance or \
+               self.state_db.get_balance(transaction.sender_address) < transaction.amount:
+                return False, f"Sender {transaction.sender_address[:10]}... insufficient balance!"
+
+        # ⛔ Chặn CROSS_TRANSFER nếu không đủ số dư
+        if transaction.tx_type == "CROSS_TRANSFER":
+            try:
+                tx_data = json.loads(transaction.data)
+                sender_address = transaction.sender_address
+                amount = tx_data["amount"]
+                if sender_address not in self.state_db.balance or \
+                   self.state_db.get_balance(sender_address) < amount:
+                    return False, f"Sender {sender_address[:10]}... insufficient balance!"
+            except Exception as e:
+                print(f"[Mempool] ❌ Lỗi khi kiểm tra CROSS_TRANSFER: {e}")
+                return False
+
         self.mempool[transaction.txid] = transaction
-        print(f"[Mempool] Đã thêm giao dịch {transaction.txid[:10]}... vào mempool. Tổng số giao dịch: {len(self.mempool)}")
-        return True
+        return True, None
     
     def apply_block(self, block) -> bool:
         try:

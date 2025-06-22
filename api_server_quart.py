@@ -1,6 +1,6 @@
 from vietid17 import Transaction, Wallet, hash_message, schnorr_sign, StateDB
 #from flask import Flask, jsonify, request, send_file
-from quart import Quart, request, jsonify, websocket, send_file
+from quart import Quart, request, jsonify, websocket, send_file, Response
 from datetime import datetime, timezone
 import logging, os, json, asyncio, traceback
 
@@ -20,42 +20,54 @@ async def get_certificate(node_id):
 
 
 @app.route('/status', methods=['GET'])
-async def status():
-    return jsonify({
-        "node_id": blockchain.node_id,
-        "shard_id": blockchain.shard_id,
-        "chain_length": len(blockchain.chain),
-        "mempool_size": len(blockchain.mempool)
-    })
+def status():
+    return Response(
+        json.dumps({
+            "node_id": blockchain.node_id,
+            "shard_id": blockchain.shard_id,
+            "chain_length": len(blockchain.chain),
+            "mempool_size": len(blockchain.mempool)
+        }, indent=2),
+        mimetype='application/json'
+    )
 
 @app.route('/block/latest', methods=['GET'])
-async def get_latest_block():
+def get_latest_block():
     latest = blockchain.get_latest_block()
-    return jsonify(latest.to_dict())
+    block_dict = latest.to_dict()
+    return Response(
+        json.dumps(block_dict, indent=2),  # indent đẹp
+        mimetype='application/json'
+    )
 
 @app.route('/blocks/recent/<int:count>', methods=['GET'])
-async def get_recent_blocks(count):
+def get_recent_blocks(count):
     recent = blockchain.chain[-count:]
-    return jsonify([block.to_dict() for block in reversed(recent)])
+    recent_dicts = [block.to_dict() for block in recent]
+    return Response(
+        json.dumps(recent_dicts, indent=2),  # indent đẹp
+        mimetype='application/json'
+    )
 
 @app.route('/block/<identifier>', methods=['GET'])
-async def get_block_by_identifier(identifier):
+def get_block_by_identifier(identifier):
     for block in blockchain.chain:
         # So sánh cả dạng int và string
         if block.hash == identifier:
-            return jsonify(block.to_dict())
+            return Response(json.dumps(block.to_dict(), indent=2), mimetype='application/json')
         try:
             if block.index == int(identifier):
-                return jsonify(block.to_dict())
+                return Response(json.dumps(block.to_dict(), indent=2), mimetype='application/json')
         except ValueError:
             continue
     return jsonify({"error": "Block not found"}), 404
 
 
 @app.route('/balance/<address>', methods=['GET'])
-async def get_balance(address):
+def get_balance(address):
     balance = blockchain.state_db.get_balance(address)
-    return jsonify({"address": address, "balance": balance})
+    return Response(json.dumps({"address": address, "balance": balance}, indent=2), mimetype='application/json')
+
 
 @app.route('/did/list', methods=['GET'])
 def get_did_list():
@@ -66,22 +78,25 @@ def get_did_list():
             "public_key_tuple": list(data.get("public_key_tuple", [])),
             "public_key_bytes": data.get("public_key_bytes").hex() if isinstance(data.get("public_key_bytes"), bytes) else data.get("public_key_bytes")
         }
-    return jsonify(safe_registry)
+    return Response(json.dumps(safe_registry, indent=2), mimetype='application/json')
+
 
 
 @app.route('/did/<did>', methods=['GET'])
 def get_did_info(did):
     data = blockchain.state_db.did_registry.get(did)
     if data:
-        return jsonify({
+        output = {
             "alias": data.get("alias"),
             "public_key_tuple": list(data.get("public_key_tuple", [])),
             "public_key_bytes": data.get("public_key_bytes").hex() if isinstance(data.get("public_key_bytes"), bytes) else data.get("public_key_bytes")
-        })
-    return jsonify({"error": "DID not found"}), 404
+        }
+        return Response(json.dumps(output, indent=2), mimetype='application/json')
+    return Response(json.dumps({"error": "DID not found"}, indent=2), mimetype='application/json')
+
 
 @app.route('/mempool', methods=['GET'])
-async def get_mempool():
+def get_mempool():
     mempool_data = []
     for tx in blockchain.mempool:
         if hasattr(tx, 'to_dict'):
@@ -93,28 +108,31 @@ async def get_mempool():
                 mempool_data.append({"error": "invalid format", "raw": tx})
         else:
             mempool_data.append({"error": "unknown tx type", "raw": str(tx)})
-    return jsonify(mempool_data)
+    return Response(json.dumps(mempool_data, indent=2), mimetype='application/json')
 
 
 @app.route('/tx/<txid>', methods=['GET'])
-async def get_transaction_by_txid(txid):
+def get_transaction_by_txid(txid):
     for block in blockchain.chain:
         for tx in block.transactions:
             if tx.txid == txid:
-                return jsonify(tx.to_dict())
-    return jsonify({"error": "Transaction not found"}), 404
+                return Response(json.dumps(tx.to_dict(), indent=2), mimetype='application/json')
+
+    return Response(json.dumps({"error": "Transaction not found"}, indent=2), mimetype='application/json')
+
 
 @app.route('/governance/proposals', methods=['GET'])
-async def get_governance_proposals():
+def get_governance_proposals():
     # Chuyển tất cả set thành list để JSON hóa
     safe_data = {
         k: {kk: list(vv) if isinstance(vv, set) else vv for kk, vv in v.items()}
         for k, v in blockchain.state_db.governance_proposals.items()
     }
-    return jsonify(safe_data)
+    return Response(json.dumps(safe_data, indent=2), mimetype='application/json')
+
 
 @app.route('/governance/proposal/<proposal_id>', methods=['GET'])
-async def get_governance_proposal(proposal_id):
+def get_governance_proposal(proposal_id):
     proposal = blockchain.state_db.governance_proposals.get(proposal_id)
     if proposal:
         # Convert the 'voters' set to a list before jsonify-ing
@@ -122,70 +140,24 @@ async def get_governance_proposal(proposal_id):
         serializable_proposal = proposal.copy()
         if "voters" in serializable_proposal and isinstance(serializable_proposal["voters"], set):
             serializable_proposal["voters"] = list(serializable_proposal["voters"])
-        return jsonify(serializable_proposal) # <--- Pass the serializable_proposal here
-    return jsonify({"error": f"proposal_id {proposal_id} not found"}), 404
+        return Response(json.dumps(serializable_proposal, indent=2), mimetype='application/json')
+    return Response(json.dumps({"error": f"proposal_id {proposal_id} not found"}, indent=2), mimetype='application/json')
 
-# In api_server.py, find the get_governance_votes route:
 
 @app.route('/governance/votes/<proposal_id>', methods=['GET'])
 def get_governance_votes(proposal_id):
     proposal = blockchain.state_db.governance_proposals.get(proposal_id)
     if proposal:
-        return jsonify({
+        output = {
             "proposal_id": proposal_id,
             "votes_for": proposal.get("votes", {}).get("YES", 0),
             "votes_against": proposal.get("votes", {}).get("NO", 0),
             "finalized": proposal.get("finalized"),
             "result": proposal.get("result")
-        })
-    return jsonify({"error": f"proposal_id {proposal_id} not found"}), 404
+        }
+        return Response(json.dumps(output, indent=2), mimetype='application/json')
 
-@app.route('/tx/send', methods=['POST'])
-async def send_transaction():
-    try:
-        data = await request.get_json()
-
-        recipient = data["recipient"]
-        amount = int(data["amount"])
-        # Xác định recipient_public_key_bytes từ recipient (có thể là pubkey hoặc address)
-        recipient_public_key_bytes = None
-
-        if len(recipient) in (66, 130):  # public key hex (compressed/uncompressed)
-            recipient_public_key_bytes = bytes.fromhex(recipient)
-        elif len(recipient) == 40:  # address dạng hex
-            recipient_pubkey = blockchain.state_db.get_pubkey_by_address(recipient)
-            if not recipient_pubkey:
-                return jsonify({
-                    "status": "error",
-                    "message": f"Cannot resolve address {recipient} to public key"
-                }), 400
-            recipient_public_key_bytes = recipient_pubkey
-        else:
-            return jsonify({"status": "error", "message": "Invalid recipient format"}), 400
-
-        tx = Transaction(
-            sender_public_key_bytes=wallet.public_key_raw_bytes,
-            #recipient_public_key_bytes=bytes.fromhex(recipient),
-            recipient_public_key_bytes=recipient_public_key_bytes,
-            amount=amount,
-            tx_type="TRANSFER",
-            data=""
-        )
-        tx_hash = hash_message(tx.to_string_for_signing().encode('utf-8'))
-        tx.signature = schnorr_sign(wallet.private_key_ecc, tx_hash)
-
-        if blockchain.add_transaction_to_mempool(tx):
-            await p2p_node.broadcast_message({
-                "type": "TRANSACTION",
-                "transaction": tx.to_dict()
-            })
-
-            return jsonify({"status": "success", "txid": tx.txid})
-        else:
-            return jsonify({"status": "failed", "reason": "Invalid or duplicate transaction"}), 400
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
+    return Response(json.dumps({"error": f"proposal_id {proposal_id} not found"}, indent=2), mimetype='application/json')
 
 @app.route('/tx/send/<tx_type>', methods=['POST'])
 async def send_special_tx(tx_type):
@@ -245,7 +217,7 @@ async def send_special_tx(tx_type):
                 sender_public_key_bytes=wallet.public_key_raw_bytes,
                 recipient_public_key_bytes=b"",
                 amount=0,
-                tx_type="GOVERNANCE_PROPOSAL",
+                tx_type="PROPOSE",
                 data=json.dumps({
                     "proposal_id": proposal_id,
                     "title": title,
@@ -256,91 +228,91 @@ async def send_special_tx(tx_type):
                 })
             )
 
+        elif tx_type == "TRANSFER":
+            recipient = data["recipient"]
+            amount = int(data["amount"])
+            recipient_public_key_bytes = None
+
+            if len(recipient) in (66, 130):
+                recipient_public_key_bytes = bytes.fromhex(recipient)
+            elif len(recipient) == 40:
+                recipient_pubkey = blockchain.state_db.get_pubkey_by_address(recipient)
+                if not recipient_pubkey:
+                    return jsonify({
+                        "status": "error",
+                        "message": f"Cannot resolve address {recipient} to public key"
+                    }), 400
+                recipient_public_key_bytes = recipient_pubkey
+            else:
+                return jsonify({"status": "error", "message": "Invalid recipient format"}), 400
+
+            tx = Transaction(
+                sender_public_key_bytes=wallet.public_key_raw_bytes,
+                recipient_public_key_bytes=recipient_public_key_bytes,
+                amount=amount,
+                tx_type="TRANSFER",
+                data=""
+            )
+
+        elif tx_type == "CROSS_TRANSFER":
+            from_shard = data["from_shard"]
+            to_shard = data["to_shard"]
+            recipient = data["recipient"]
+            amount = int(data["amount"])
+
+            # Tạo giao dịch
+            tx = Transaction(
+                sender_public_key_bytes=wallet.public_key_raw_bytes,
+                recipient_public_key_bytes=b'',
+                amount=amount,
+                tx_type="CROSS_TRANSFER",
+                data=json.dumps({
+                    "from_shard": from_shard,
+                    "to_shard": to_shard,
+                    "recipient": recipient,
+                    "amount": amount
+                }),
+                timestamp=datetime.utcnow().isoformat() + "Z"
+            )
+
         else:
             return jsonify({"error": f"Transaction type '{tx_type}' not supported"}), 400
 
         tx.signature = schnorr_sign(wallet.private_key_ecc, hash_message(tx.to_string_for_signing().encode()))
-        
-        if blockchain.add_transaction_to_mempool(tx):
+
+        success, reason = blockchain.add_transaction_to_mempool(tx)
+        if success:
             await p2p_node.broadcast_message({
                 "type": "TRANSACTION",
                 "transaction": tx.to_dict()
             })
             return jsonify({"status": "success", "txid": tx.txid})
-        
         else:
-            return jsonify({"status": "failed", "reason": "Transaction invalid or exists"}), 400
-        
+            return jsonify({"status": "failed", "reason": reason or "Giao dịch không hợp lệ"}), 400
+
     except Exception as e:
         print(f"An error occurred: {e}") # New log
         traceback.print_exc() # New log to print the full traceback
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route('/tx/send/CROSS_TRANSFER', methods=['POST'])
-async def send_cross_transfer():
-    try:
-
-        data = await request.get_json()
-
-        print(f"[DEBUG] Nhận CROSS_TRANSFER: from {data.get('from_shard')} → {data.get('to_shard')}")
-        from_shard = data["from_shard"]
-        to_shard = data["to_shard"]
-        recipient_address = data["recipient_address"]
-        amount = int(data["amount"])
-        print("[DEBUG] API request.json:", data)
-        print(f"[DEBUG] API extracted from_shard: {from_shard}, to_shard: {to_shard}, recipient: {recipient_address}, amount: {amount}")
-
-        # Tạo giao dịch
-        tx = Transaction(
-            sender_public_key_bytes=wallet.public_key_raw_bytes,
-            recipient_public_key_bytes=b'',
-            amount=amount,
-            tx_type="CROSS_TRANSFER",
-            data=json.dumps({
-                "from_shard": from_shard,
-                "to_shard": to_shard,
-                "recipient_address": recipient_address,
-                "amount": amount
-            }),
-            timestamp=datetime.utcnow().isoformat() + "Z"
-        )
-
-        # Ký giao dịch
-        tx_hash = hash_message(tx.to_string_for_signing().encode('utf-8'))
-        tx.signature = schnorr_sign(wallet.private_key_ecc, tx_hash)
-
-        print(f"[CROSS_TX] Giao dịch CROSS_TRANSFER được tạo: {tx.txid}")
-
-        # Thêm vào mempool và broadcast nếu hợp lệ
-        if blockchain.add_transaction_to_mempool(tx):
-            await p2p_node.broadcast_message({
-                "type": "TRANSACTION",
-                "transaction": tx.to_dict()
-            })
-            return jsonify({"status": "success", "txid": tx.txid})
-        else:
-            return jsonify({"status": "failed", "reason": "Transaction invalid or exists"}), 400
-
-    except Exception as e:
-        print(f"[ERROR] CROSS_TRANSFER TX error: {e}")
-        traceback.print_exc()
-        return jsonify({"status": "error", "message": str(e)}), 500
-
 @app.route("/", methods=["GET"])
 async def index():
-    return {
+    output = {
         "message": "VietID node is running!",
         "node_id": blockchain.node_id,
         "shard_id": blockchain.shard_id,
         "address": wallet.address
     }
+    return Response(json.dumps(output, indent=2), mimetype='application/json')
+    
 @app.route("/health", methods=["GET"])
 async def health():
-    return jsonify({"status": "ok"}), 200
+    return Response(json.dumps({"status": "ok"}, indent=2), mimetype='application/json')
 
 @app.route("/chain", methods=["GET"])
 async def get_chain():
     return jsonify([block.to_dict() for block in blockchain.chain])
+    
 
 
 @app.websocket('/ws/<peer_id>')
