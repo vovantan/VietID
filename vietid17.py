@@ -894,6 +894,23 @@ class VietIDBlockchain:
                 print(f"[Governance] ❌ Lỗi khi kiểm tra proposal_id: {e}")
                 return False
 
+        if transaction.tx_type == "VOTE":
+            try:
+                vote_data = json.loads(transaction.data)
+                proposal_id = vote_data["proposal_id"]
+                pubkey_hex = transaction.sender_public_key_bytes.hex()
+
+                proposal = self.state_db.governance_proposals.get(proposal_id)
+                if not proposal:
+                    return False, f"Proposal '{proposal_id}' does not exist!"
+                if proposal["finalized"]:
+                    return False, f"Proposal '{proposal_id}' is over!"
+                if pubkey_hex in proposal["voters"]:
+                    return False, f"Users voted for the proposal '{proposal_id}'"
+            except Exception as e:
+                return False, f"Lỗi khi kiểm tra VOTE: {e}"
+
+
         # ⛔ Chặn TRANSFER nếu không đủ số dư
         if transaction.tx_type == "TRANSFER":
             if transaction.sender_address not in self.state_db.balance or \
