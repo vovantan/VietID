@@ -594,7 +594,7 @@ class StateDB:
             return True
 
         return False
-
+    '''
     def create_snapshot(self, block_index: int, block_hash: str):
         # Tạo một snapshot của trạng thái hiện tại
         current_state = {
@@ -658,7 +658,7 @@ class StateDB:
         
         print(f"[StateDB] Đã tải snapshot trạng thái từ block {block_index} ({block_hash[:10]}...).")
         return True
-    '''
+
     def mint_tokens(self, address: str, amount: int) -> bool:
         if amount <= 0:
             return False
