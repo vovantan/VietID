@@ -251,7 +251,10 @@ async def send_special_tx(tx_type):
                 recipient_public_key_bytes=recipient_public_key_bytes,
                 amount=amount,
                 tx_type="TRANSFER",
-                data=""
+                data=json.dumps({
+                    "recipient": recipient,
+                    "amount": amount
+                })
             )
 
         elif tx_type == "CROSS_TRANSFER":
