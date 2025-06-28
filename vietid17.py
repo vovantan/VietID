@@ -488,7 +488,7 @@ class StateDB:
                         self.governance_proposals[proposal_id] = {
                             "description": description,
                             "votes": {"YES": 0, "NO": 0},
-                            "voters": set(),
+                            "voters": [],#set(),
                             "finalized": False,
                             "result": None,
                             "action": proposal_data.get("action"),
@@ -523,7 +523,8 @@ class StateDB:
                         return False
 
                     proposal["votes"][vote] += 1
-                    proposal["voters"].add(pubkey_hex)  # ✅ Đúng với kiểu `set`
+                    #proposal["voters"].add(pubkey_hex)  # ✅ Đúng với kiểu `set`
+                    proposal["voters"].append(pubkey_hex)
                     print(f"[GOV] 🗳️ Vote '{vote}' cho '{proposal_id}' từ {pubkey_hex[:10]}...")
 
                     self.try_finalize_proposal(proposal_id)
